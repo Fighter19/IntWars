@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -25,43 +25,31 @@
 #include "proxy.hpp"
 #include "stack.hpp"
 #include "function_types.hpp"
-#include "userdata.hpp"
+#include "usertype.hpp"
 
 namespace sol {
 class table : public reference {
     friend class state;
-    template<typename T, typename U>
-    typename stack::get_return<T>::type single_get(U&& key) const {
+    template<typename T, typename Key>
+    stack::get_return<T> single_get(Key&& key) const {
         push();
-        stack::push(state(), std::forward<U>(key));
+        stack::push(state(), std::forward<Key>(key));
         lua_gettable(state(), -2);
-        type_assert(state(), -1, type_of<T>());
-        auto&& result = stack::pop<T>(state());
-        lua_pop(state(), 1);
+        stack::get_return<T> result = stack::pop<T>(state());
+        pop();
         return result;
     }
 
-    template<std::size_t I, typename Tup, typename... Ret>
-    typename std::tuple_element<I, std::tuple<typename stack::get_return<Ret>::type...>>::type element_get(types<Ret...>, Tup&& key) const {
-        typedef typename std::tuple_element<I, std::tuple<Ret...>>::type T;
-        return single_get<T>(std::get<I>(key));
+    template<typename Keys, typename... Ret, std::size_t... I>
+    stack::get_return<Ret...> tuple_get(types<Ret...>, indices<I...>, Keys&& keys) const {
+        return stack::get_return<Ret...>(single_get<Ret>(std::get<I>(keys))...);
     }
 
-    template<typename Tup, typename... Ret, std::size_t... I>
-    typename return_type<typename stack::get_return<Ret>::type...>::type tuple_get(types<Ret...> t, indices<I...>, Tup&& tup) const {
-       return std::make_tuple(element_get<I>(t, std::forward<Tup>(tup))...);
+    template<typename Keys, typename Ret, std::size_t I>
+    stack::get_return<Ret> tuple_get(types<Ret>, indices<I>, Keys&& keys) const {
+        return single_get<Ret>(std::get<I>(keys));
     }
 
-    template<typename Tup, typename Ret>
-    typename stack::get_return<Ret>::type tuple_get(types<Ret> t, indices<0>, Tup&& tup) const {
-        return element_get<0>(t, std::forward<Tup>(tup));
-    }
-
-    template<typename... Ret, typename... Keys>
-    typename return_type<typename stack::get_return<Ret>::type...>::type get(types<Ret...> t, Keys&&... keys) const {
-        static_assert(sizeof...(Keys) == sizeof...(Ret), "Must have same number of keys as return values");
-        return tuple_get(t, t, std::make_tuple(std::forward<Keys>(keys)...));
-    }
 public:
     table() noexcept : reference() {}
     table(lua_State* L, int index = -1) : reference(L, index) {
@@ -69,8 +57,8 @@ public:
     }
 
     template<typename... Ret, typename... Keys>
-    typename return_type<typename stack::get_return<Ret>::type...>::type get(Keys&&... keys) const {
-       return get(types<Ret...>(), std::forward<Keys>(keys)...);
+    stack::get_return<Ret...> get( Keys&&... keys ) const {
+        return tuple_get(types<Ret...>(), build_indices<sizeof...(Ret)>(), std::tie(keys...));
     }
 
     template<typename T, typename U>
@@ -84,12 +72,22 @@ public:
     }
 
     template<typename T>
-    table& set_userdata(userdata<T>& user) {
-        return set_userdata(user.name(), user);
+    SOL_DEPRECATED table& set_userdata(usertype<T>& user) {
+        return set_usertype(user);
     }
 
     template<typename Key, typename T>
-    table& set_userdata(Key&& key, userdata<T>& user) {
+    SOL_DEPRECATED table& set_userdata(Key&& key, usertype<T>& user) {
+        return set_usertype(std::forward<Key>(key), user);
+    }
+
+    template<typename T>
+    table& set_usertype(usertype<T>& user) {
+        return set_usertype(usertype_traits<T>::name, user);
+    }
+
+    template<typename Key, typename T>
+    table& set_usertype(Key&& key, usertype<T>& user) {
         push();
         stack::push(state(), std::forward<Key>(key));
         stack::push(state(), user);
@@ -98,19 +96,34 @@ public:
         return *this;
     }
 
+    template<typename Fx>
+    void for_each(Fx&& fx) const {
+        push();
+        stack::push(state(), nil);
+        while (lua_next(this->state(), -2)) {
+            sol::object key(state(), -2);
+            sol::object value(state(), -1);
+            fx(key, value);
+            lua_pop(state(), 1);
+        }
+        pop();
+    }
+
     size_t size() const {
         push();
-        return lua_rawlen(state(), -1);
+        size_t result = lua_rawlen(state(), -1);
+        pop();
+        return result;
     }
 
     template<typename T>
-    proxy<table, T> operator[](T&& key) {
-        return proxy<table, T>(*this, std::forward<T>(key));
+    proxy<table, T> operator[]( T&& key ) {
+        return proxy<table, T>( *this, std::forward<T>( key ) );
     }
 
     template<typename T>
-    proxy<const table, T> operator[](T&& key) const {
-        return proxy<const table, T>(*this, std::forward<T>(key));
+    proxy<const table, T> operator[]( T&& key ) const {
+        return proxy<const table, T>( *this, std::forward<T>( key ) );
     }
 
     void pop(int n = 1) const noexcept {
@@ -151,11 +164,6 @@ private:
     template<typename R, typename... Args, typename Fx, typename Key, typename = typename std::result_of<Fx(Args...)>::type>
     void set_fx(types<R(Args...)>, Key&& key, Fx&& fx) {
         set_resolved_function<R(Args...)>(std::forward<Key>(key), std::forward<Fx>(fx));
-    }
-
-    template<typename... Args, typename Fx, typename Key, typename R = typename std::result_of<Fx(Args...)>::type>
-    void set_fx(types<Args...>, Key&& key, Fx&& fx){
-        set_fx(types<R(Args...)>(), std::forward<Key>(key), std::forward<Fx>(fx));
     }
 
     template<typename Fx, typename Key>

@@ -60,6 +60,7 @@ void Game::registerHandler(bool (Game::*handler)(HANDLE_ARGS), PacketCmd pktcmd,
 
 void Game::printPacket(const uint8 *buffer, uint32 size)
 {
+	/*
 #define ppMIN(a, b)       ((a) < (b) ? (a) : (b))
 	char* stringbuffer = new char[size+256]; // 256 bytes for the message around it.
 	memset(stringbuffer, 0, (size + 256 )* sizeof(char));
@@ -104,6 +105,7 @@ void Game::printPacket(const uint8 *buffer, uint32 size)
 
 	CORE_INFO("%s", stringbuffer);
 	delete[] stringbuffer;
+	*/
 }
 
 void Game::printLine(uint8 *buf, uint32 len)
@@ -186,6 +188,7 @@ bool Game::broadcastPacketVision(Object* o, const uint8 *data, uint32 length, ui
          broadcastPacketTeam((i == 0) ? TEAM_BLUE : TEAM_PURPLE, data, length, channelNo, flag);
       }
    }
+   return 0;
 }
 
 bool Game::handlePacket(ENetPeer *peer, ENetPacket *packet, uint8 channelID)

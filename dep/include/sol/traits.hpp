@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -118,11 +118,18 @@ struct return_type<T> {
 };
 
 template<>
-struct return_type<> : types<>{
+struct return_type<> {
     typedef void type;
 };
 
+template <typename Empty, typename... Tn>
+using ReturnTypeOr = typename std::conditional<(sizeof...(Tn) < 1), Empty, typename return_type<Tn...>::type>::type;
+
+template <typename... Tn>
+using ReturnType = ReturnTypeOr<void, Tn...>;
+
 namespace detail {
+
 template<typename T, bool isclass = std::is_class<Unqualified<T>>::value>
 struct is_function_impl : std::is_function<typename std::remove_pointer<T>::type> {};
 
@@ -146,10 +153,11 @@ struct is_function_impl<T, true> {
 
 template<class F>
 struct check_deducible_signature {
+    struct nat {};
     template<class G>
     static auto test(int) -> decltype(&G::operator(), void());
     template<class>
-    static auto test(...) -> struct nat;
+    static auto test(...) -> nat;
 
     using type = std::is_void<decltype(test<F>(0))>;
 };
@@ -278,8 +286,8 @@ struct member_traits : detail::member_traits<Signature> {
 
 struct has_begin_end_impl {
     template<typename T, typename U = Unqualified<T>,
-                         typename B = decltype(std::declval<U&>().begin()),
-                         typename E = decltype(std::declval<U&>().end())>
+        typename B = decltype(std::declval<U&>().begin()),
+        typename E = decltype(std::declval<U&>().end())>
     static std::true_type test(int);
 
     template<typename...>
@@ -291,9 +299,9 @@ struct has_begin_end : decltype(has_begin_end_impl::test<T>(0)) {};
 
 struct has_key_value_pair_impl {
     template<typename T, typename U = Unqualified<T>,
-             typename V = typename U::value_type,
-             typename F = decltype(std::declval<V&>().first),
-             typename S = decltype(std::declval<V&>().second)>
+        typename V = typename U::value_type,
+        typename F = decltype(std::declval<V&>().first),
+        typename S = decltype(std::declval<V&>().second)>
     static std::true_type test(int);
 
     template<typename...>
@@ -312,6 +320,7 @@ template<typename Arg>
 Unwrap<Arg> unwrapper(std::reference_wrapper<Arg> arg) {
     return arg.get();
 }
+
 } // sol
 
 #endif // SOL_TRAITS_HPP

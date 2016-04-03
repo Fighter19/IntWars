@@ -130,7 +130,7 @@ void Champion::update(int64 diff) {
       const std::map<uint32, Object*>& objects = map->getObjects();
       float distanceToTarget = 9000000.f;
       Unit* nextTarget = 0;
-      float range = std::max(stats->getRange(), DETECT_RANGE);
+      float range = max(stats->getRange(), DETECT_RANGE);
 
       for (auto& it : objects) {
          Unit* u = dynamic_cast<Unit*> (it.second);

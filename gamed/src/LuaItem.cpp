@@ -5,7 +5,7 @@
 
 void LuaScript::addItem() {
     sol::constructors <sol::types < ItemTemplate*, uint8, uint8>> itemInstanceCtr;
-    sol::userdata <ItemInstance> itemInstanceUserData(
+    sol::usertype <ItemInstance> itemInstanceUserData(
             "ItemInstance", itemInstanceCtr,
             "getTemplate", &ItemInstance::getTemplate,
             "getStacks", &ItemInstance::getStacks,
@@ -13,10 +13,10 @@ void LuaScript::addItem() {
             "incrementStacks", &ItemInstance::incrementStacks,
             "getRecipeSearchFlag", &ItemInstance::getRecipeSearchFlag,
             "setRecipeSearchFlag", &ItemInstance::setRecipeSearchFlag);
-    lua.set_userdata(itemInstanceUserData);
+    lua.set_usertype(itemInstanceUserData);
 
     sol::constructors < sol::types<uint32, uint32, uint32, float, bool, std::vector<StatMod>, std::vector < uint32>>> itemTemplateCtr;
-    sol::userdata <ItemTemplate> itemTemplateUserData(
+    sol::usertype <ItemTemplate> itemTemplateUserData(
             "ItemTemplate", itemTemplateCtr,
             "getId", &ItemTemplate::getId,
             "getMaxStack", &ItemTemplate::getMaxStack,
@@ -27,15 +27,15 @@ void LuaScript::addItem() {
             //"getStatMods", &ItemTemplate::getStatMods, //StatMod not defined
             "isRecipe", &ItemTemplate::isRecipe,
             "getRecipeParts", &ItemTemplate::getRecipeParts);
-    lua.set_userdata(itemTemplateUserData);
+    lua.set_usertype(itemTemplateUserData);
 
     sol::constructors <sol::types<>> inventoryCtr;
-    sol::userdata <Inventory> inventoryUserData(
+    sol::usertype <Inventory> inventoryUserData(
             "Inventory", inventoryCtr,
             "getItems", &Inventory::getItems,
             "addItem", &Inventory::addItem,
             "swapItems", &Inventory::swapItems,
             "removeItem", &Inventory::removeItem,
             "getAvailableRecipeParts", &Inventory::getAvailableRecipeParts);
-    lua.set_userdata(inventoryUserData);
+    lua.set_usertype(inventoryUserData);
 }

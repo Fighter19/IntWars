@@ -9,7 +9,7 @@
 
 void LuaScript::addChampion() {
     sol::constructors <sol::types < std::string, Map*, uint32, uint32>> championCtr;
-    sol::userdata <Champion> championUserData(
+    sol::usertype <Champion> championUserData(
             "Champion", championCtr,
             "getSpell", &Champion::getSpell,
             "getStats", &Champion::getStats,
@@ -32,10 +32,10 @@ void LuaScript::addChampion() {
             "setTeam", &Champion::setTeam,
             "getBuff", &Champion::getBuff); //Also inherited from unit
             //"distanceWith", &Champion::distanceWith); //Will simply not work
-    lua.set_userdata(championUserData);
+    lua.set_usertype(championUserData);
 
     sol::constructors <sol::types<>> statsCtr;
-    sol::userdata <Stats> statsUserData(//and now the part where I want to kill myself
+    sol::usertype <Stats> statsUserData(//and now the part where I want to kill myself
             "Stats", statsCtr,
             "getTotalAp", &Stats::getTotalAp,
             "getTotalAd", &Stats::getTotalAd,
@@ -74,10 +74,10 @@ void LuaScript::addChampion() {
             "setArmorPenPct", &Stats::setArmorPenPct,
             "setMagicPenFlat", &Stats::setMagicPenFlat,
             "setMagicPenPct", &Stats::setMagicPenPct);
-    lua.set_userdata(statsUserData);
+    lua.set_usertype(statsUserData);
 
     sol::constructors <sol::types <Champion*, std::string, uint8>> spellCtr;
-    sol::userdata <Spell> spellUserData(
+    sol::usertype <Spell> spellUserData(
             "Spell", spellCtr,
             "getOwner", &Spell::getOwner,
             "getId", &Spell::getId,
@@ -89,5 +89,5 @@ void LuaScript::addChampion() {
             "levelUp", &Spell::levelUp,
             "getState", &Spell::getState,
             "getSlot", &Spell::getSlot);
-    lua.set_userdata(spellUserData);
+    lua.set_usertype(spellUserData);
 }

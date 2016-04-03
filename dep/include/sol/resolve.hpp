@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -43,7 +43,7 @@ inline auto resolve_f(std::true_type, F&& f)
 template<typename F>
 inline void resolve_f(std::false_type, F&&) {
     static_assert(has_deducible_signature<F>::value,
-                  "Cannot use no-template-parameter call with an overloaded functor: specify the signature");
+                    "Cannot use no-template-parameter call with an overloaded functor: specify the signature");
 }
 
 template<typename F, typename U = Unqualified<F>>

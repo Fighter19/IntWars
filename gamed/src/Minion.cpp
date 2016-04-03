@@ -98,7 +98,7 @@ void Minion::keepFocussingTarget()
 
 void Minion::walkToDestination()
 { 
-	if ((waypoints.size() == 1) || (curWaypoint == 2 && ++curMainWaypoint < mainWaypoints.size()))
+	if ((waypoints.size() == 1) || (curWaypoint == 2 && (++curMainWaypoint < mainWaypoints.size())))
 	{
 		//CORE_INFO("Minion reached a point! Going to %f; %f", mainWaypoints[curMainWaypoint].X, mainWaypoints[curMainWaypoint].Y);
 		vector<Vector2> newWaypoints = { Vector2(x, y), mainWaypoints[curMainWaypoint] };

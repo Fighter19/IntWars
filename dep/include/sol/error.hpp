@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -28,7 +28,7 @@
 namespace sol {
 class error : public std::runtime_error {
 public:
-    error(const std::string& str) noexcept: std::runtime_error("lua: error: " + str) {}
+    error(const std::string& str): std::runtime_error("lua: error: " + str) {}
 };
 } // sol
 

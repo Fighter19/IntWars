@@ -9,14 +9,14 @@
 
 void LuaScript::addUnit() {
     sol::constructors <sol::types<float, float>> targetCtr;
-    sol::userdata <Target> targetUserData(
+    sol::usertype <Target> targetUserData(
             "Target", targetCtr,
             //"distanceWith", &Target::distanceWith, //will not work... multiple implementations?
             "getX", &Target::getX,
             "getY", &Target::getY,
             "setPosition", &Target::setPosition,
             "isSimpleTarget", &Target::isSimpleTarget);
-    lua.set_userdata(targetUserData);
+    lua.set_usertype(targetUserData);
     
     //Because Object is abstract:
     /*sol::constructors <sol::types < Map*, uint32, float, float, uint32>> objCtr;
@@ -38,12 +38,12 @@ void LuaScript::addUnit() {
             "getY", &Object::getY,
             "isTargetable", &Object::isTargetable,
             "setTargetable", &Object::setTargetable);
-    lua.set_userdata(objUserData);*/
+    lua.set_usertype(objUserData);*/
 
     //Basic documentation in 3... 2... 1...
     //constructor types here ------------\ are needed, even though we won't use it in lua
     sol::constructors <sol::types < Map*, uint32, std::string, Stats*, uint32, float, float, uint32>> unitCtr;
-    sol::userdata <Unit> unitUserData(// this is the actual user data.
+    sol::usertype <Unit> unitUserData(// this is the actual user data.
             "Unit", unitCtr, //Unit's constructor, not really useful, but necessary.
             "getStats", &Unit::getStats, //"methodName", &Class::method
             "getMoveSpeed", &Unit::getMoveSpeed,
@@ -67,17 +67,17 @@ void LuaScript::addUnit() {
             "getX", &Unit::getX, // some Target methods
             "getY", &Unit::getY,
             "getBuff", &Unit::getBuff);
-            
-    lua.set_userdata(unitUserData); //Add the userData to lua
+         
+    lua.set_usertype(unitUserData); //Add the userData to lua
 
             
     sol::constructors <sol::types < std::string, float, BuffType, Unit*>, sol::types<std::string, float, BuffType, Unit*, Unit*> > buffCtr;
-    sol::userdata <Buff> buffUserData(// this is the actual user data.
+    sol::usertype <Buff> buffUserData(// this is the actual user data.
             "Buff", buffCtr, //Unit's constructor, not really useful, but necessary.
             "getName", &Buff::getName,
             "setMovementSpeedPercentModifier", &Buff::setMovementSpeedPercentModifier
             );//"methodName", &Class::method);
-    lua.set_userdata(buffUserData); //Add the userData to lua
+    lua.set_usertype(buffUserData); //Add the userData to lua
     
     //Setting lua values:
     lua.set("DAMAGE_TYPE_PHYSICAL", DAMAGE_TYPE_PHYSICAL);

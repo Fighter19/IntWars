@@ -65,7 +65,7 @@ uint32 RAFFile::getHash(const std::string& path) {
 	return hash;
 }
 
-bool RAFFile::readFile(const std::string& path, vector<unsigned char>& toFill) {
+bool RAFFile::readFile(const std::string& path, std::vector<unsigned char>& toFill) {
    uint32 hash = getHash(path);
    vector<unsigned char> compressedFile;
    

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -29,7 +29,8 @@
 namespace sol {
 namespace detail {
 inline int atpanic(lua_State* L) {
-    std::string err = lua_tostring(L, -1);
+    const char* message = lua_tostring(L, -1);
+    std::string err = message ? message : "An unexpected error occured and forced the lua state to call atpanic";
     throw error(err);
 }
 } // detail
@@ -54,11 +55,17 @@ private:
     table reg;
     table global;
 public:
-    state():
+    state(lua_CFunction panic = detail::atpanic):
     L(luaL_newstate(), lua_close),
     reg(L.get(), LUA_REGISTRYINDEX),
+#if SOL_LUA_VERSION < 502
+    // Global table is just a special index
+    global(L.get(), LUA_GLOBALSINDEX) {
+#else
+    // Global tables are stored in the environment/registry table
     global(reg.get<table>(LUA_RIDX_GLOBALS)) {
-        lua_atpanic(L.get(), detail::atpanic);
+#endif // Lua 5.2
+        set_panic(panic);
     }
 
     lua_State* lua_state() const {
@@ -77,6 +84,9 @@ public:
 
         for(auto&& library : libraries) {
             switch(library) {
+#if SOL_LUA_VERSION <= 501 && defined(SOL_LUAJIT)
+            case lib::coroutine:
+#endif // luajit opens coroutine base stuff
             case lib::base:
                 luaL_requiref(L.get(), "base", luaopen_base, 1);
                 lua_pop(L.get(), 1);
@@ -85,10 +95,12 @@ public:
                 luaL_requiref(L.get(), "package", luaopen_package, 1);
                 lua_pop(L.get(), 1);
                 break;
+#if SOL_LUA_VERSION > 501
             case lib::coroutine:
                 luaL_requiref(L.get(), "coroutine", luaopen_coroutine, 1);
                 lua_pop(L.get(), 1);
                 break;
+#endif // Lua 5.2+ only
             case lib::string:
                 luaL_requiref(L.get(), "string", luaopen_string, 1);
                 lua_pop(L.get(), 1);
@@ -102,8 +114,11 @@ public:
                 lua_pop(L.get(), 1);
                 break;
             case lib::bit32:
+#if SOL_LUA_VERSION > 510
                 luaL_requiref(L.get(), "bit32", luaopen_bit32, 1);
                 lua_pop(L.get(), 1);
+#else
+#endif // Lua 5.2+ only
                 break;
             case lib::io:
                 luaL_requiref(L.get(), "io", luaopen_io, 1);
@@ -137,8 +152,8 @@ public:
 
     template<typename... Args, typename... Keys>
     auto get(Keys&&... keys) const
-    -> decltype(global.get(types<Args...>(), std::forward<Keys>(keys)...)) {
-       return global.get(types<Args...>(), std::forward<Keys>(keys)...);
+    -> decltype(global.get<Args...>(std::forward<Keys>(keys)...)) {
+        return global.get<Args...>(std::forward<Keys>(keys)...);
     }
 
     template<typename T, typename U>
@@ -148,27 +163,52 @@ public:
     }
 
     template<typename T>
-    state& set_userdata(userdata<T>& user) {
-        return set_userdata(user.name(), user);
+    SOL_DEPRECATED table& set_userdata(usertype<T>& user) {
+        return set_usertype(user);
     }
 
     template<typename Key, typename T>
-    state& set_userdata(Key&& key, userdata<T>& user) {
-        global.set_userdata(std::forward<Key>(key), user);
+    SOL_DEPRECATED table& set_userdata(Key&& key, usertype<T>& user) {
+        return set_usertype(std::forward<Key>(key), user);
+    }
+
+    template<typename Class, typename... CTor, typename... Args>
+    SOL_DEPRECATED state& new_userdata(const std::string& name, Args&&... args) {
+        return new_usertype<Class>(name, std::forward<Args>(args)...);
+    }
+
+    template<typename Class, typename... CArgs, typename... Args>
+    SOL_DEPRECATED state& new_userdata(const std::string& name, constructors<CArgs...> ctor, Args&&... args) {
+        return new_usertype(name, std::move(ctor), std::forward<Args>(args)...);
+    }
+
+    template<typename T>
+    state& set_usertype(usertype<T>& user) {
+        return set_usertype(usertype_traits<T>::name, user);
+    }
+
+    template<typename Key, typename T>
+    state& set_usertype(Key&& key, usertype<T>& user) {
+        global.set_usertype(std::forward<Key>(key), user);
         return *this;
     }
 
     template<typename Class, typename... CTor, typename... Args>
-    state& new_userdata(const std::string& name, Args&&... args) {
+    state& new_usertype(const std::string& name, Args&&... args) {
         constructors<types<CTor...>> ctor{};
-        return new_userdata<Class>(name, ctor, std::forward<Args>(args)...);
+        return new_usertype<Class>(name, ctor, std::forward<Args>(args)...);
     }
 
     template<typename Class, typename... CArgs, typename... Args>
-    state& new_userdata(const std::string& name, constructors<CArgs...> ctor, Args&&... args) {
-        userdata<Class> udata(name, ctor, std::forward<Args>(args)...);
-        global.set_userdata(udata);
+    state& new_usertype(const std::string& name, constructors<CArgs...> ctor, Args&&... args) {
+        usertype<Class> utype(ctor, std::forward<Args>(args)...);
+        set_usertype(name, utype);
         return *this;
+    }
+
+    template <typename Fx>
+    void for_each(Fx&& fx) {
+        global.for_each(std::forward<Fx>(fx));
     }
 
     template<typename T>
@@ -193,6 +233,10 @@ public:
 
     table registry() const {
         return reg;
+    }
+
+    void set_panic(lua_CFunction panic){
+        lua_atpanic(L.get(), panic);
     }
 
     template<typename T>

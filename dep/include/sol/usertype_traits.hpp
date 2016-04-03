@@ -19,11 +19,29 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SOL_HPP
-#define SOL_HPP
+#ifndef SOL_USERTYPE_TRAITS_HPP
+#define SOL_USERTYPE_TRAITS_HPP
 
-#include "sol/state.hpp"
-#include "sol/object.hpp"
-#include "sol/function.hpp"
+#include "demangle.hpp"
 
-#endif // SOL_HPP
+namespace sol {
+
+template<typename T>
+struct usertype_traits {
+    static const std::string name;
+    static const std::string metatable;
+    static const std::string gctable;
+};
+
+template<typename T>
+const std::string usertype_traits<T>::name = detail::demangle(typeid(T));
+
+template<typename T>
+const std::string usertype_traits<T>::metatable = std::string("sol.").append(detail::demangle(typeid(T)));
+
+template<typename T>
+const std::string usertype_traits<T>::gctable = std::string("sol.").append(detail::demangle(typeid(T))).append(".\xE2\x99\xBB");
+
+}
+
+#endif // SOL_USERTYPE_TRAITS_HPP

@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -31,6 +31,8 @@ private:
     int ref = LUA_NOREF;
 
     int copy() const {
+        if (ref == LUA_NOREF)
+            return LUA_NOREF;
         push();
         return luaL_ref(L, LUA_REGISTRYINDEX);
     }
@@ -44,10 +46,6 @@ public:
 
     virtual ~reference() {
         luaL_unref(L, LUA_REGISTRYINDEX, ref);
-    }
-
-    void push() const noexcept {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     }
 
     reference(reference&& o) noexcept {
@@ -79,7 +77,20 @@ public:
         return *this;
     }
 
-    type get_type() {
+    int push() const noexcept {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+        return 1;
+    }
+
+    int get_index() const {
+        return ref;
+    }
+
+    bool valid () const {
+        return !(ref == LUA_NOREF);
+    }
+
+    type get_type() const {
         push();
         int result = lua_type(L, -1);
         lua_pop(L, 1);

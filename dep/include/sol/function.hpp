@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2013 Danny Y., Rapptz
+// Copyright (c) 2013-2015 Danny Y., Rapptz
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -22,66 +22,226 @@
 #ifndef SOL_FUNCTION_HPP
 #define SOL_FUNCTION_HPP
 
+#define NOMINMAX
+#define __cplusplus
+
 #include "reference.hpp"
 #include "tuple.hpp"
 #include "stack.hpp"
 #include "function_types.hpp"
-#include "userdata_traits.hpp"
+#include "usertype_traits.hpp"
 #include "resolve.hpp"
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <algorithm>
+
+#undef max
+
 
 namespace sol {
-class function : public reference {
+class function_result {
 private:
-    void luacall(std::size_t argcount, std::size_t resultcount) const {
-        lua_call(state(), static_cast<uint32_t>(argcount), static_cast<uint32_t>(resultcount));
+    lua_State* L;
+    int index;
+    int returncount;
+    call_error error;
+
+    template <typename T, std::size_t I>
+    stack::get_return<T> get(types<T>, indices<I>) const {
+        return stack::get<T>(L, index);
     }
 
-    template<typename... Ret>
-    std::tuple<Ret...> invoke(types<Ret...>, std::size_t n) const {
-        luacall(n, sizeof...(Ret));
-        return stack::pop_reverse_call(state(), std::make_tuple<Ret...>, types<Ret...>());
-    }
-
-    template<typename Ret>
-    Ret invoke(types<Ret>, std::size_t n) const {
-        luacall(n, 1);
-        return stack::pop<Ret>(state());
-    }
-
-    void invoke(types<void>, std::size_t n) const {
-        luacall(n, 0);
-    }
-
-    void invoke(types<>, std::size_t n) const {
-        luacall(n, 0);
+    template <typename... Ret, std::size_t... I>
+    stack::get_return<Ret...> get(types<Ret...>, indices<I...>) const {
+        auto r = std::make_tuple(stack::get<Ret>(L, index + I)...);
+        return r;
     }
 
 public:
+    function_result() = default;
+    function_result(lua_State* L, int index = -1, int returncount = 0, call_error error = call_error::ok): L(L), index(index), returncount(returncount), error(error) {
+        
+    }
+    function_result(const function_result&) = default;
+    function_result& operator=(const function_result&) = default;
+    function_result(function_result&& o) : L(o.L), index(o.index), returncount(o.returncount), error(o.error) {
+        // Must be manual, otherwise destructor will screw us
+        // return count being 0 is enough to keep things clean
+        // but will be thorough
+        o.L = nullptr;
+        o.index = 0;
+        o.returncount = 0;
+        o.error = call_error::runtime;
+    }
+    function_result& operator=(function_result&& o) {
+        L = o.L;
+        index = o.index;
+        returncount = o.returncount;
+        error = o.error;
+        // Must be manual, otherwise destructor will screw us
+        // return count being 0 is enough to keep things clean
+        // but will be thorough
+        o.L = nullptr;
+        o.index = 0;
+        o.returncount = 0;
+        o.error = call_error::runtime;
+        return *this;
+    }
+
+    bool valid() const {
+        return error == call_error::ok;
+    }
+
+    template<typename T>
+    T get() const {
+        tuple_types<Unqualified<T>> tr;
+        return get(tr, tr);
+    }
+
+    operator std::string() const {
+        return get<std::string>();
+    }
+
+    template<typename T, EnableIf<Not<std::is_same<Unqualified<T>, const char*>>, Not<std::is_same<Unqualified<T>, char>>, Not<std::is_same<Unqualified<T>, std::string>>, Not<std::is_same<Unqualified<T>, std::initializer_list<char>>>> = 0>
+    operator T () const {
+        return get<T>();
+    }
+
+    ~function_result() {
+        stack::remove(L, index, error == call_error::ok ? returncount : 1);
+    }
+};
+
+class function : public reference {
+private:
+	static reference& handler_storage() {
+		static sol::reference h;
+		return h;
+	}
+
+public:
+    static const reference& get_default_handler () {
+        return handler_storage();
+    }
+
+    static void set_default_handler( reference& ref ) {
+        handler_storage() = ref;
+    }
+
+private:
+    struct handler {
+        const reference& target;
+        int stack;
+        handler(const reference& target) : target(target), stack(0) {
+            if (target.valid()) {
+                stack = lua_gettop(target.state()) + 1;
+                target.push();
+            }
+        }
+        ~handler() {
+            if (stack > 0) {
+                lua_remove(target.state(), stack);
+            }
+        }
+    };
+
+    int luacodecall(std::ptrdiff_t argcount, std::ptrdiff_t resultcount, handler& h) const {
+        return lua_pcallk(state(), static_cast<int>(argcount), static_cast<int>(resultcount), h.stack, 0, nullptr);
+    }
+
+    void luacall(std::ptrdiff_t argcount, std::ptrdiff_t resultcount, handler& h) const {
+        lua_callk(state(), static_cast<int>(argcount), static_cast<int>(resultcount), 0, nullptr);
+    }
+
+    template<std::size_t... I, typename... Ret>
+    std::tuple<Ret...> invoke(indices<I...>, types<Ret...>, std::ptrdiff_t n, handler& h) const {
+        luacall(n, sizeof...(Ret), h);
+        const int nreturns = static_cast<int>(sizeof...(Ret));
+        const int stacksize = lua_gettop(state());
+        const int firstreturn = std::max(0, stacksize - nreturns) + 1;
+        auto r = std::make_tuple(stack::get<Ret>(state(), firstreturn + I)...);
+        lua_pop(state(), nreturns);
+        return r;
+    }
+
+    template<std::size_t I, typename Ret>
+    Ret invoke(indices<I>, types<Ret>, std::ptrdiff_t n, handler& h) const {
+        luacall(n, 1, h);
+        return stack::pop<Ret>(state());
+    }
+
+    template <std::size_t I>
+    void invoke(indices<I>, types<void>, std::ptrdiff_t n, handler& h) const {
+        luacall(n, 0, h);
+    }
+
+    function_result invoke(indices<>, types<>, std::ptrdiff_t n, handler& h) const {
+        const bool handlerpushed = error_handler.valid();
+        const int stacksize = lua_gettop(state());
+        const int firstreturn = std::max(0, stacksize - static_cast<int>(n) - 1);
+        int code = LUA_OK;
+        try {
+            code = luacodecall(n, LUA_MULTRET, h);
+        }
+        // Handle C++ errors thrown from C++ functions bound inside of lua
+        catch (const std::exception& error) {
+            code = LUA_ERRRUN;
+		  h.stack = 0;
+            stack::push(state(), error.what());
+        }
+        // TODO: handle idiots?
+        /*catch (const char* error) {
+            code = LUA_ERRRUN;
+            stack::push(state(), error);
+        }
+        catch (const std::string& error) {
+            code = LUA_ERRRUN;
+            stack::push(state(), error);
+        }
+        catch (...) {
+            code = LUA_ERRRUN;
+            stack::push( state(), "[sol] an unknownable runtime exception occurred" );
+        }*/
+        catch (...) {
+            throw;
+        }
+        const int poststacksize = lua_gettop(state());
+        const int returncount = poststacksize - firstreturn;
+        return function_result(state(), firstreturn + ( handlerpushed ? 0 : 1 ), returncount, static_cast<call_error>(code));
+    }
+
+public:
+    sol::reference error_handler;
+
     function() = default;
-    function(lua_State* L, int index = -1): reference(L, index) {
+    function(lua_State* L, int index = -1): reference(L, index), error_handler(get_default_handler()) {
         type_assert(L, index, type::function);
     }
     function(const function&) = default;
     function& operator=(const function&) = default;
+    function( function&& ) = default;
+    function& operator=( function&& ) = default;
 
     template<typename... Args>
-    void operator()(Args&&... args) const {
-        call<>(std::forward<Args>(args)...);
+    function_result operator()(Args&&... args) const {
+        return call<>(std::forward<Args>(args)...);
     }
 
     template<typename... Ret, typename... Args>
-    typename return_type<Ret...>::type operator()(types<Ret...>, Args&&... args) const {
+    auto operator()(types<Ret...>, Args&&... args) const 
+    -> decltype(invoke(types<Ret...>(), types<Ret...>(), 0, std::declval<handler&>())) {
         return call<Ret...>(std::forward<Args>(args)...);
     }
 
     template<typename... Ret, typename... Args>
-    typename return_type<Ret...>::type call(Args&&... args) const {
+    auto call(Args&&... args) const
+    -> decltype(invoke(types<Ret...>(), types<Ret...>(), 0, std::declval<handler&>())) {
+        handler h(error_handler);
         push();
-        stack::push_args(state(), std::forward<Args>(args)...);
-        return invoke(types<Ret...>(), sizeof...(Args));
+        int pushcount = stack::push_args(state(), std::forward<Args>(args)...);
+        auto tr = types<Ret...>();
+        return invoke(tr, tr, pushcount, h);
     }
 };
 
@@ -95,11 +255,6 @@ struct pusher<function_sig_t<Sigs...>> {
         typedef R(* fx_ptr_t)(Args...);
         typedef std::is_convertible<raw_fx_t, fx_ptr_t> is_convertible;
         set_isconvertible_fx(is_convertible(), t, L, std::forward<Fx>(fx));
-    }
-
-    template<typename... Args, typename Fx, typename R = typename std::result_of<Fx(Args...)>::type>
-    static void set_memfx(types<Args...>, lua_State* L, Fx&& fx){
-        set_memfx(types<R(Args...)>(), L, std::forward<Fx>(fx));
     }
 
     template<typename Fx>
@@ -116,7 +271,7 @@ struct pusher<function_sig_t<Sigs...>> {
 
     template<typename Sig>
     static void set(lua_State* L, Sig* fxptr){
-       set_fx(std::false_type(), L, fxptr);
+        set_fx(std::false_type(), L, fxptr);
     }
 
     template<typename... Args, typename R, typename C, typename T>
@@ -169,14 +324,16 @@ struct pusher<function_sig_t<Sigs...>> {
         // idx n + 1: is the object's void pointer
         // We don't need to store the size, because the other side is templated
         // with the same member function pointer type
-        Decay<Fx> memfxptr(std::forward<Fx>(fx));
+        typedef Decay<Fx> dFx;
+        typedef Unqualified<Fx> uFx;
+        dFx memfxptr(std::forward<Fx>(fx));
         auto userptr = sol::detail::get_ptr(obj);
         void* userobjdata = static_cast<void*>(userptr);
-        lua_CFunction freefunc = &static_member_function<Decay<decltype(*userptr)>, Fx>::call;
+        lua_CFunction freefunc = &static_member_function<Decay<decltype(*userptr)>, uFx>::call;
 
         int upvalues = stack::detail::push_as_upvalues(L, memfxptr);
-        stack::push(L, userobjdata);
-        ++upvalues;
+        upvalues += stack::push(L, userobjdata);
+        
         stack::push(L, freefunc, upvalues);
     }
 
@@ -191,13 +348,14 @@ struct pusher<function_sig_t<Sigs...>> {
 
     template<typename Fx>
     static void set_fx(lua_State* L, std::unique_ptr<base_function> luafunc) {
-        auto&& metakey = userdata_traits<Unqualified<Fx>>::metatable;
+        auto&& metakey = usertype_traits<Unqualified<Fx>>::metatable;
         const char* metatablename = std::addressof(metakey[0]);
         base_function* target = luafunc.release();
         void* userdata = reinterpret_cast<void*>(target);
         lua_CFunction freefunc = &base_function::call;
-
-        if(luaL_newmetatable(L, metatablename) == 1) {
+       
+        int metapushed = luaL_newmetatable(L, metatablename);
+        if(metapushed == 1) {
             lua_pushstring(L, "__gc");
             stack::push(L, &base_function::gc);
             lua_settable(L, -3);
@@ -209,15 +367,17 @@ struct pusher<function_sig_t<Sigs...>> {
     }
 
     template<typename... Args>
-    static void push(lua_State* L, Args&&... args) {
+    static int push(lua_State* L, Args&&... args) {
+        // Set will always place one thing (function) on the stack
         set(L, std::forward<Args>(args)...);
+        return 1;
     }
 };
 
 template<typename Signature>
 struct pusher<std::function<Signature>> {
-    static void push(lua_State* L, std::function<Signature> fx) {
-        pusher<function_t>{}.push(L, std::move(fx));
+    static int push(lua_State* L, std::function<Signature> fx) {
+        return pusher<function_t>{}.push(L, std::move(fx));
     }
 };
 

@@ -159,7 +159,7 @@ void Unit::dealDamageTo(Unit* target, float damage, DamageType type, DamageSourc
     //Damage dealing. (based on leagueoflegends' wikia)
     damage = defense >= 0 ? (100 / (100 + defense)) * damage : (2 - (100 / (100 - defense))) * damage;
 
-    target->getStats().setCurrentHealth(std::max(0.f, target->getStats().getCurrentHealth() - damage));
+    target->getStats().setCurrentHealth(max(0.f, target->getStats().getCurrentHealth() - damage));
     if (!target->deathFlag && target->getStats().getCurrentHealth() <= 0) {
         target->deathFlag = true;
         target->die(this);

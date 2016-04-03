@@ -5,7 +5,7 @@
 
 void LuaScript::addGame() {
     sol::constructors <sol::types<>> gameCtr;
-    sol::userdata <Game> gameUserData(
+    sol::usertype <Game> gameUserData(
             "Game", gameCtr,
             "notifyMinionSpawned", &Game::notifyMinionSpawned,
             "notifySetHealth", &Game::notifySetHealth,
@@ -24,7 +24,7 @@ void LuaScript::addGame() {
             "notifyItemsSwapped", &Game::notifyItemsSwapped,
             "notifyRemoveItem", &Game::notifyRemoveItem,
             "notifySetTarget", &Game::notifySetTarget);
-    lua.set_userdata(gameUserData);
+    lua.set_usertype(gameUserData);
 
     //Because Map is abstract...
     /*sol::constructors <sol::types < Game*>> mapCtr;
@@ -36,5 +36,5 @@ void LuaScript::addGame() {
             "getExperienceToLevelUp", &Map::getExperienceToLevelUp,
             "getGame", &Map::getGame,
             "getObjects", &Map::getObjects);
-    lua.set_userdata(mapUserData);*/
+    lua.set_usertype(mapUserData);*/
 }

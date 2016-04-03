@@ -19,8 +19,10 @@ public:
 	 static const std::string CurrentTime();
 	 void setLogFile(const char* filename, bool isPlainText = false, bool showOnScreen = false);
 
-    void log(const std::string& tag, const char* funcName, const char* sourceFile, 
-        unsigned int lineNum, const std::string& fmt, ...);
+	 void log(const std::string & tag, const char * funcName, const char * sourceFile, unsigned int lineNum, const std::string fmt, ...);
+
+   // void log(const std::string& tag, const char* funcName, const char* sourceFile, 
+   //     unsigned int lineNum, const std::string& fmt, ...);
 
     /**
      * @brief Flushes output buffer. Called for critical events
